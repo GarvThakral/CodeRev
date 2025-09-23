@@ -1,41 +1,51 @@
 from langchain_cohere import ChatCohere
-from langchain_community.tools import ReadFileTool
+from langchain_community.tools import ReadFileTool 
+from langchain_community.agent_toolkits import FileManagementToolkit
 from langchain_community.tools import ListDirectoryTool
 from langchain.agents import AgentExecutor
 from langchain.agents import create_tool_calling_agent
 from langchain.prompts import ChatPromptTemplate , PromptTemplate
 from dotenv import load_dotenv
+from langchain_google_genai import ChatGoogleGenerativeAI
+import json
 load_dotenv()
 
-model = ChatCohere(temperature=0)
+model = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
+
+# template = ChatPromptTemplate([
+#     ("system", """You are a codebase analyzer. Use ListDirectoryTool to find all files in directories and subdirectories. Use ReadFileTool to examine file contents. Categorize files as relevant (code files) or irrelevant (config/system files). Output final JSON: {{"relevant": ["file1.py"], "irrelevant": [".env"]}}"""),
+#     ("human", "{input}"),
+#     ("placeholder", "{agent_scratchpad}")
+# ])
+
+# tools = [ReadFileTool(),ListDirectoryTool()]
+
+# agent = create_tool_calling_agent(model,tools , template)
+
+# agent_executor = AgentExecutor(agent=agent, tools=tools , verbose=True)
+
+# output = agent_executor.invoke({"input": "List all files in the current directory and its sub directories"})['output']
+
+# print(output)
+# print(json.loads(output.replace('`','')[4:])['relevant'])
+
+template = "You are a file editor AI , replace all the text in the given file to 'Hi mom' "
 
 template = ChatPromptTemplate([
-        ("system","""You are a code base analyser agent , your job is to find out all the file names present in the given directory strictly using the ListDirectoryTool. Make sure the output is one continuos list of file paths like ... fil1.py' , 'file2.py' , 'src/file3.py"
-        Once You are done finding the file names , read through the files strictly using the ReadFileTool . If the file does not contribute to the codebase , consider them useless . Return the file names in structured json .
-        """),
-        ("human", "What files are in /root/haha"),
-        ("ai", "'relevant':'['fil1.py' , 'file2.py' , 'src/file3.py']' , 'irrelevant':'['test.sh','.env']'"),
-        ("human", "{prompt}\n\n{agent_scratchpad}"),
+    ("system","You are a file editor AI , replace all the text in the given file to 'Hi mom'"),
+    ("human","Relace the contents of the file test.py in the current working directory"),
+    ("ai","The contents of the file have been replaced t 'Hi mom'"),
+    ("human","{input}"),
+    ("placeholder", "{agent_scratchpad}")
+
 ])
 
-template = ChatPromptTemplate([
-        ("system","You are a code base analyser agent , your job is to find out all the file names present in the given directory strictly using the ListDirectoryTool. Make sure the output is one continuos list of file paths like ... fil1.py' , 'file2.py' , 'src/file3.py'"),
-        ("human", "What files are in /root/haha"),
-        ("ai", "'relevant':'['fil1.py' , 'file2.py' , 'src/file3.py']' , 'irrelevant':'['test.sh','.env']'"),
-        ("human", "{prompt}\n\n{agent_scratchpad}"),
-])
+toolkit = FileManagementToolkit()
 
-tools = [ReadFileTool(),ListDirectoryTool()]
+tools = toolkit.get_tools()
 
-agent = create_tool_calling_agent(model,tools , template)
+agent = create_tool_calling_agent(llm = model , tools = tools , prompt = template)
 
 agent_executor = AgentExecutor(agent=agent, tools=tools , verbose=True)
 
-
-prompt = PromptTemplate.from_template(
-    template = """You are a codebase analyzer AI , given the directory structure , extract files which are relevant to the code base . Meaning keep only file names which contribute to the actual code . For example xyz.py and remove file names which are not important for the codebase , for example test.sh , .env"""
-)
-
-chain = agent_executor | model | prompt
-
-print(chain.invoke({"prompt":"List all files in the current directory and its sub directories "})['output'])
+print(agent_executor.invoke({"input":"Replace the contents of ./src/klp/tesy.py"}))
