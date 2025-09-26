@@ -10,12 +10,17 @@ from dotenv import load_dotenv
 from langchain_core.messages import SystemMessage , HumanMessage , AIMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 import sys
+from typing import Annotated 
+from pydantic import BaseModel
+from langchain.output_parsers import PydanticOutputParser
+
 from langchain_openai import ChatOpenAI
 import json
 load_dotenv()
 
 # model = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
 # model = ChatCohere(temperature=0)
+OPENROUTER_API_KEY = "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"
 
 
 model = ChatOpenAI(
@@ -53,7 +58,12 @@ relevantListFiltered = [x for x in relevantList if x != "index.py"]
 print(relevantListFiltered)
 
 template = ChatPromptTemplate([
-    ("system","""You are a code optimizer AI , read all the text given in the file index.py and if you see any scope of optimization for example , nested loops , vectorized implementation or being effficient in any sense , then suggest the changes by creating another file called 'original_file_name'_replace.py .Make sure the new file is created for the user to see it . Also return the output in structured json format like this : 
+    ("system","""You are a code optimizer AI , read all the text given in the file index.py and if you see any scope of optimization for example , nested loops , vectorized implementation or being effficient in any sense . Try to keep majority of the original implementation , try to optimize the code as little as possible. Also look for any missing imports , variable mismatchs , memory leaks , vulnerabilities , API_KEYS and then suggest the changes by creating another file called 'original_file_name'_replace.py .
+     Do not escape them into HTML entities like &lt;, &gt;, &amp;. 
+        For example:
+        - Write "<tag>" instead of "&lt;tag&gt;"
+        - Write "&" instead of "&amp;"
+     Make sure the new file is created for the user to see it . Also return the output in structured json format like this : 
     {{
         "original":"print(1+12)",
      "optimized":"print(13)"
@@ -78,12 +88,18 @@ toolkit = FileManagementToolkit()
 
 tools = toolkit.get_tools()
 
+class ExpectedOptimizationOutput(BaseModel):
+    original:str
+    optimized:str
+
+parser = PydanticOutputParser(pydantic_object=ExpectedOptimizationOutput)
+
 agent = create_tool_calling_agent(llm = model , tools = tools , prompt = template)
 
 memory = [
 ]
 
-agent_executor = AgentExecutor(agent=agent , tools=tools , verbose=True)
+agent_executor = AgentExecutor(agent=agent , tools=tools , verbose=True , output_parser=parser)
 
 for x in relevantListFiltered:
     json_output = agent_executor.invoke({"input":f"Optimize the following code file {x}","chat_history":memory})["output"]
